@@ -4,6 +4,7 @@ import json
 
 from app.db import get_db
 from app.services import audit as audit_svc
+from app.services.audit_arch import require_gate_or_raise
 from app.services.errors import ServiceError
 
 VALID_STATUS = ("草稿", "生效", "废止")
@@ -92,6 +93,7 @@ def create_protocol(
         raise ServiceError("必填字段不能空")
     if not visits:
         raise ServiceError("访视编码不能空")
+    require_gate_or_raise(db_path)
     with get_db(db_path) as conn:
         n = conn.execute("SELECT COUNT(*) AS c FROM protocols").fetchone()["c"] + 1
         code = f"PROT-{n:03d}"
@@ -118,6 +120,7 @@ def create_protocol(
 def set_status(protocol_id: int, status: str, db_path: str | None = None) -> dict:
     if status not in VALID_STATUS:
         raise ServiceError("方案状态无效")
+    require_gate_or_raise(db_path)
     with get_db(db_path) as conn:
         row = conn.execute(
             "SELECT * FROM protocols WHERE id=?", (protocol_id,)
@@ -145,6 +148,7 @@ def update_fields(
     note: str | None = None,
     db_path: str | None = None,
 ) -> dict:
+    require_gate_or_raise(db_path)
     with get_db(db_path) as conn:
         row = conn.execute(
             "SELECT * FROM protocols WHERE id=?", (protocol_id,)

@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from app.db import get_db
 from app.services import audit as audit_svc
+from app.services.audit_arch import dashboard as arch_dashboard
+from app.services.audit_arch import require_gate_or_raise
 from app.services.errors import ServiceError
 
 
 def dashboard(db_path: str | None = None) -> dict:
-    from app.services.audit_arch_audit import audit_summary as _audit_arch_audit
     with get_db(db_path) as conn:
         sites = conn.execute("SELECT COUNT(*) AS c FROM trial_sites").fetchone()["c"]
         sites_enabled = conn.execute(
@@ -36,6 +37,7 @@ def dashboard(db_path: str | None = None) -> dict:
             SELECT status, COUNT(*) AS c FROM visit_batches GROUP BY status
             """
         ).fetchall()
+        arch = arch_dashboard(db_path)
         return {
             "sites": sites,
             "sites_enabled": sites_enabled,
@@ -47,11 +49,38 @@ def dashboard(db_path: str | None = None) -> dict:
             "pending_jobs": jobs,
             "audits": audits,
             "batch_status": {r["status"]: r["c"] for r in by_batch_status},
-            "audit_arch_audit": _audit_arch_audit(db_path),
+            "audit_arch": {
+                "chip": arch["chip"],
+                "truth": arch["truth"],
+                "aligned": arch["aligned"],
+                "active_read": arch["active_read"],
+                "sealed": arch["sealed"],
+                "cutover_fp": arch["cutover_fp"],
+                "reject_refresh": arch["reject_refresh"],
+                "archive_count": arch["archive_count"],
+                "panel_pack_mismatch": arch["panel_pack_mismatch"],
+            },
+            "audit_arch_audit": _audit_arch_audit_compat(db_path),
         }
 
 
+def _audit_arch_audit_compat(db_path: str | None = None) -> dict:
+    """纯读兼容面：只汇总，不写入。"""
+    from app.services.audit_arch import book_rows, list_events
+    from app.services import audit_arch_cutover as cutover_svc
+    from app.services import audit_arch_dualwrite as dual_svc
+    return {
+        "title": "审计归档审计",
+        "events": list_events(db_path),
+        "book": book_rows(db_path),
+        "cutover": cutover_svc.board(db_path),
+        "dualwrite": dual_svc.dual_board(db_path),
+        "half": dual_svc.half_dual(db_path),
+    }
+
+
 def run_reconcile(db_path: str | None = None) -> dict:
+    require_gate_or_raise(db_path)
     with get_db(db_path) as conn:
         gap_rows = conn.execute(
             """

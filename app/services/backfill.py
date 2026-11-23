@@ -6,6 +6,7 @@ from datetime import datetime
 from app.db import get_db
 from app.services import audit as audit_svc
 from app.services import settings as settings_svc
+from app.services.audit_arch import require_gate_or_raise
 from app.services.errors import ServiceError
 
 JOB_STATUS = ("排队", "执行中", "成功", "失败")
@@ -68,6 +69,7 @@ def enqueue_from_row(row_id: int, db_path: str | None = None) -> dict:
     row_id = int(row_id or 0)
     if row_id <= 0:
         raise ServiceError("必须指定访视行")
+    require_gate_or_raise(db_path)
     with get_db(db_path) as conn:
         row = conn.execute("SELECT * FROM visit_rows WHERE id=?", (row_id,)).fetchone()
         if not row:
@@ -109,8 +111,7 @@ def enqueue_from_row(row_id: int, db_path: str | None = None) -> dict:
 
 
 def enqueue_gaps_for_batch(batch_id: int, db_path: str | None = None) -> dict:
-    from app.services.audit_arch import commit_action
-    commit_action({"enqueue_batch": batch_id}, db_path)
+    require_gate_or_raise(db_path)
     with get_db(db_path) as conn:
         rows = conn.execute(
             """
@@ -138,6 +139,7 @@ def enqueue_gaps_for_batch(batch_id: int, db_path: str | None = None) -> dict:
 
 
 def run_job(job_id: int, succeed: bool = True, db_path: str | None = None) -> dict:
+    require_gate_or_raise(db_path)
     max_attempt = settings_svc.get_int("backfill_max_attempt", 3, db_path=db_path)
     with get_db(db_path) as conn:
         job = conn.execute(
@@ -255,6 +257,7 @@ def run_job(job_id: int, succeed: bool = True, db_path: str | None = None) -> di
 
 
 def retry_job(job_id: int, db_path: str | None = None) -> dict:
+    require_gate_or_raise(db_path)
     with get_db(db_path) as conn:
         job = conn.execute(
             "SELECT * FROM backfill_jobs WHERE id=?", (job_id,)

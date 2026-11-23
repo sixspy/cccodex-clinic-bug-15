@@ -1,4 +1,4 @@
-"""审计归档读轨审计：汇总切流账册与双写两轨两侧引用。"""
+"""审计归档读轨审计（纯读）：汇总旁路账册与双写面，不产生任何写入。"""
 from __future__ import annotations
 
 from app.db import get_db

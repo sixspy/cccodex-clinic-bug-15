@@ -4,6 +4,7 @@ import json
 
 from app.db import get_db
 from app.services import audit as audit_svc
+from app.services.audit_arch import require_gate_or_raise
 from app.services.errors import ServiceError
 
 SEVERITIES = ("提示", "一般", "严重")
@@ -110,6 +111,7 @@ def _field_hints(quality: str, payload: str, required: list[str]) -> list[tuple[
 
 
 def scan_batch(batch_id: int, db_path: str | None = None) -> dict:
+    require_gate_or_raise(db_path)
     created = []
     with get_db(db_path) as conn:
         batch = conn.execute(
@@ -201,6 +203,7 @@ def scan_all_open(db_path: str | None = None) -> dict:
 
 
 def close_finding(finding_id: int, db_path: str | None = None) -> dict:
+    require_gate_or_raise(db_path)
     with get_db(db_path) as conn:
         row = conn.execute(
             "SELECT * FROM qc_findings WHERE id=?", (finding_id,)
@@ -235,6 +238,7 @@ def close_finding(finding_id: int, db_path: str | None = None) -> dict:
 
 
 def reopen_finding(finding_id: int, db_path: str | None = None) -> dict:
+    require_gate_or_raise(db_path)
     with get_db(db_path) as conn:
         row = conn.execute(
             "SELECT * FROM qc_findings WHERE id=?", (finding_id,)

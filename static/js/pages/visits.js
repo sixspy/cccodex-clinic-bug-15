@@ -1,4 +1,5 @@
 import { api, chip, escapeHtml } from '../api.js';
+import { renderArchChipMount } from '../arch.js';
 
 export async function renderVisits(el) {
   const [batches, sites, protocols] = await Promise.all([
@@ -16,7 +17,7 @@ export async function renderVisits(el) {
 
   el.innerHTML = `
     <div class="card">
-      <h2><span class="chip" data-thick="audit_arch">归档已亮</span> 访视清单抓取批次</h2>
+      <h2><span data-arch-chip></span> 访视清单抓取批次</h2>
       <p class="muted">按试验中心开批次，模拟抓取访视行，合格行可入库，缺口行进入质控与补采。</p>
       <div class="row">
         <select id="siteId">${siteOpts}</select>
@@ -241,4 +242,5 @@ export async function renderVisits(el) {
   el.querySelector('#reload').onclick = () => softReload().catch((e) => showErr(e.message));
   el.querySelector('#statusFilter').onchange = () => softReload().catch((e) => showErr(e.message));
   bindBatchActions();
+  await renderArchChipMount(el);
 }

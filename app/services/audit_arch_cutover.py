@@ -1,66 +1,81 @@
-"""审计归档切流账册：应锁当刻指纹并拒回刷；当前只记软笔记。"""
+"""审计归档切流账册（甲路，唯一收口路径）。
+
+收口动作：
+- 当刻活审计事件逐行封进只追加旁路账册（audit_arch_book_*）；
+- 锁定全量指纹、置 reject_refresh=1、读轨分叉到 cutover_book；
+- 收口后账册拒绝回刷：新增活审计事件不会改动账册与指纹；
+- 缺锁争用由 audit_arch_sealed 唯一键兜底，并发只允许一份成功。
+"""
 from __future__ import annotations
 
-from app.db import get_db
 from app.services.audit_arch import (
+    _OK,
+    _TITLE,
     active_read_ref,
+    book_rows,
+    commit_action,
     cutover_fp,
     dashboard,
+    is_sealed,
     panel_chip,
-    record_event,
     reject_refresh,
     truth_flag,
 )
+from app.services.errors import ServiceError
 
 _SLUG = "audit_arch"
-_TITLE = "审计归档"
-_OK = "归档已亮"
-_BAD = "活审计可改"
+
+
+def book_events(db_path: str | None = None) -> list[dict]:
+    """旁路账册只读视图。"""
+    return book_rows(db_path)
 
 
 def append_cutover(ref_id: int, note: str, db_path: str | None = None) -> dict:
-    with get_db(db_path) as conn:
-        conn.execute(
-            "INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)",
-            (f"{_SLUG}_cutover_note_{ref_id}", note or _TITLE),
-        )
-        # missing: durable fp lock + reject_refresh=1 + active_read=cutover_book
-        conn.execute(
-            "INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)",
-            (f"{_SLUG}_panel_chip", _OK),
-        )
-    record_event(f"cutover-note ref={ref_id} {note}", db_path)
+    """甲路收口入口：委托 commit_action 在单事务内完成全部落地。"""
+    result = commit_action(
+        {"ref_id": int(ref_id or 0), "note": note or _TITLE},
+        db_path,
+    )
     return {
-        "ref_id": ref_id,
-        "note": note,
+        "ref_id": int(ref_id or 0),
+        "note": note or _TITLE,
         "panel": panel_chip(db_path),
         "truth": truth_flag(db_path),
         "active_read": active_read_ref(db_path),
         "cutover_fp": cutover_fp(db_path),
         "reject_refresh": reject_refresh(db_path),
+        "sealed": is_sealed(db_path),
+        "book_count": len(book_events(db_path)),
+        "result": result,
     }
 
 
 def cutover_rows(db_path: str | None = None) -> list[dict]:
-    with get_db(db_path) as conn:
-        rows = conn.execute(
-            "SELECT key, value FROM meta WHERE key LIKE ? ORDER BY key",
-            (f"{_SLUG}_cutover_%",),
-        ).fetchall()
-        return [
-            {
-                "key": r["key"],
-                "value": r["value"],
-                "chip": panel_chip(db_path),
-                "active_read": active_read_ref(db_path),
-            }
-            for r in rows
-        ]
+    """只读：返回账册条目，不产生任何写入。"""
+    ref = active_read_ref(db_path)
+    chip = panel_chip(db_path)
+    return [
+        {
+            "key": e["key"],
+            "value": e["payload"],
+            "fp": e["fp"],
+            "chip": chip,
+            "active_read": ref,
+        }
+        for e in book_events(db_path)
+    ]
 
 
 def board(db_path: str | None = None) -> dict:
     dash = dashboard(db_path)
     dash["cutover"] = cutover_rows(db_path)
+    dash["book"] = book_events(db_path)
     dash["fate"] = "cutover_book"
-    dash["panel_pack_mismatch"] = dash.get("panel_pack_mismatch", True)
+    dash["sealed"] = is_sealed(db_path)
     return dash
+
+
+def ensure_cutover_or_raise(db_path: str | None = None) -> None:
+    if not is_sealed(db_path) or active_read_ref(db_path) != "cutover_book":
+        raise ServiceError(f"{_TITLE}尚未按甲路收口，读轨仍在旧档", 409)

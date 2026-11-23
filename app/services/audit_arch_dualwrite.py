@@ -1,81 +1,60 @@
-"""审计归档双写两轨：应将旧档送入只读归档并改读新旗；当前只亮镜像芯片。"""
+"""审计归档双写两轨（乙路）——本场禁双开。
+
+本场只办甲路（旁路账册 cutover_book）。乙路写入口一律 409 拒绝，
+且不得写入任何 meta；读接口纯读，绝不点灯、不留痕。
+"""
 from __future__ import annotations
 
-from app.db import get_db
 from app.services.audit_arch import (
+    _BAD,
+    _OK,
+    _TITLE,
     active_read_ref,
     archive_rows,
     dashboard,
     live_flag,
-    paint_ok,
     truth_flag,
 )
+from app.services.errors import ServiceError
 
 _SLUG = "audit_arch"
-_OK = "归档已亮"
-_BAD = "活审计可改"
-_TITLE = "审计归档"
-
-
-def _meta_set(conn, key: str, value: str) -> None:
-    conn.execute(
-        "INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)",
-        (key, value),
-    )
 
 
 def dual_chip(db_path: str | None = None) -> str:
-    with get_db(db_path) as conn:
-        row = conn.execute(
-            "SELECT value FROM meta WHERE key=?",
-            (f"{_SLUG}_dual_chip",),
-        ).fetchone()
-        return row["value"] if row else _OK
+    # 纯读：没有独立芯片键时如实回显主钉定面徽标
+    return dashboard(db_path)["chip"]
 
 
 def seed_dual(db_path: str | None = None) -> None:
-    with get_db(db_path) as conn:
-        _meta_set(conn, f"{_SLUG}_dual_chip", _OK)
-        _meta_set(conn, f"{_SLUG}_dual_truth", _BAD)
-        # missing archive move + live_flag + active_read=live_flag
+    """禁双开：乙路不允许预置任何状态，保留函数名仅为空操作。"""
+    return None
 
 
 def apply_dualwrite(note: str = "", db_path: str | None = None) -> dict:
-    seed_dual(db_path)
-    paint_ok(db_path)
-    with get_db(db_path) as conn:
-        _meta_set(conn, f"{_SLUG}_dual_note", note or _TITLE)
-        # intentionally skip archive_% and live_flag rewrite
-    return {
-        "dual_chip": dual_chip(db_path),
-        "truth": truth_flag(db_path),
-        "active_read": active_read_ref(db_path),
-        "archive_count": len(archive_rows(db_path)),
-        "live_flag": live_flag(db_path),
-    }
+    raise ServiceError(
+        f"{_TITLE}本场只走甲路切流账册，乙路双写禁双开", 409
+    )
 
 
 def dual_board(db_path: str | None = None) -> dict:
-    seed_dual(db_path)
-    dash = dashboard(db_path)
+    snap = dashboard(db_path)
     return {
-        "dual_chip": dual_chip(db_path),
+        "dual_chip": snap["chip"],
         "truth": truth_flag(db_path),
         "active_read": active_read_ref(db_path),
         "archive": archive_rows(db_path),
         "live_flag": live_flag(db_path),
-        "dash": dash,
-        "fate": "dualwrite",
-        "panel_pack_mismatch": True,
-        "title": f"{_TITLE}双写面",
+        "dash": snap,
+        "fate": "disabled_dualwrite",
+        "panel_pack_mismatch": snap["panel_pack_mismatch"],
+        "title": f"{_TITLE}双写面（已禁双开）",
     }
 
 
 def half_dual(db_path: str | None = None) -> dict:
-    paint_ok(db_path)
-    seed_dual(db_path)
+    """纯读半面：不再点灯，只回显当前真实状态。"""
     return {
-        "dual_chip": dual_chip(db_path),
+        "dual_chip": dashboard(db_path)["chip"],
         "truth": truth_flag(db_path),
         "active_read": active_read_ref(db_path),
     }

@@ -7,6 +7,7 @@ from datetime import datetime
 from app.db import get_db
 from app.services import audit as audit_svc
 from app.services import protocols as protocols_svc
+from app.services.audit_arch import require_gate_or_raise
 from app.services.errors import ServiceError
 
 BATCH_STATUS = ("采集中", "已收齐", "已关闭")
@@ -109,6 +110,7 @@ def create_batch(
     site_id = int(site_id or 0)
     if site_id <= 0:
         raise ServiceError("必须指定试验中心")
+    require_gate_or_raise(db_path)
     with get_db(db_path) as conn:
         site = conn.execute(
             "SELECT * FROM trial_sites WHERE id=?", (site_id,)
@@ -191,6 +193,7 @@ def add_visit_row(
         raise ServiceError("受试者键格式无效")
     if not visit_code:
         raise ServiceError("访视编码不能空")
+    require_gate_or_raise(db_path)
     with get_db(db_path) as conn:
         batch = conn.execute(
             "SELECT * FROM visit_batches WHERE id=?", (batch_id,)
@@ -277,6 +280,7 @@ def mock_crawl(
     db_path: str | None = None,
 ) -> dict:
     count = max(1, min(30, int(count or 5)))
+    require_gate_or_raise(db_path)
     created = []
     with get_db(db_path) as conn:
         batch = conn.execute(
@@ -346,6 +350,7 @@ def mock_crawl(
 
 
 def close_batch(batch_id: int, db_path: str | None = None) -> dict:
+    require_gate_or_raise(db_path)
     with get_db(db_path) as conn:
         batch = conn.execute(
             "SELECT * FROM visit_batches WHERE id=?", (batch_id,)
@@ -378,6 +383,7 @@ def close_batch(batch_id: int, db_path: str | None = None) -> dict:
 
 
 def mark_batch_complete(batch_id: int, db_path: str | None = None) -> dict:
+    require_gate_or_raise(db_path)
     with get_db(db_path) as conn:
         batch = conn.execute(
             "SELECT * FROM visit_batches WHERE id=?", (batch_id,)
@@ -436,6 +442,7 @@ def list_rows(
 def set_row_status(row_id: int, status: str, db_path: str | None = None) -> dict:
     if status not in ROW_STATUS:
         raise ServiceError("访视行状态无效")
+    require_gate_or_raise(db_path)
     with get_db(db_path) as conn:
         row = conn.execute("SELECT * FROM visit_rows WHERE id=?", (row_id,)).fetchone()
         if not row:
@@ -458,6 +465,7 @@ def set_row_status(row_id: int, status: str, db_path: str | None = None) -> dict
 
 
 def ingest_ok_rows(batch_id: int, db_path: str | None = None) -> dict:
+    require_gate_or_raise(db_path)
     with get_db(db_path) as conn:
         batch = conn.execute(
             "SELECT * FROM visit_batches WHERE id=?", (batch_id,)

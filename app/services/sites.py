@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from app.db import get_db
 from app.services import audit as audit_svc
+from app.services.audit_arch import require_gate_or_raise
 from app.services.errors import ServiceError
 
 VALID_STATUS = ("启用", "停用", "观察")
@@ -82,6 +83,7 @@ def create_site(
     region = (region or "").strip()[:40]
     principal = (principal or "").strip()[:40]
     note = (note or "").strip()[:200]
+    require_gate_or_raise(db_path)
     with get_db(db_path) as conn:
         exists = conn.execute(
             "SELECT id FROM trial_sites WHERE name=?", (name,)
@@ -105,6 +107,7 @@ def create_site(
 def set_status(site_id: int, status: str, db_path: str | None = None) -> dict:
     if status not in VALID_STATUS:
         raise ServiceError("试验中心状态无效")
+    require_gate_or_raise(db_path)
     with get_db(db_path) as conn:
         row = conn.execute("SELECT * FROM trial_sites WHERE id=?", (site_id,)).fetchone()
         if not row:
@@ -129,8 +132,7 @@ def set_status(site_id: int, status: str, db_path: str | None = None) -> dict:
 
 
 def update_quota(site_id: int, quota: int, db_path: str | None = None) -> dict:
-    from app.services.audit_arch import commit_action
-    commit_action({"site_id": site_id, "quota": quota}, db_path)
+    require_gate_or_raise(db_path)
     quota = max(1, min(9999, int(quota or 1)))
     with get_db(db_path) as conn:
         row = conn.execute("SELECT id FROM trial_sites WHERE id=?", (site_id,)).fetchone()
@@ -150,6 +152,7 @@ def update_note(
     region: str = "",
     db_path: str | None = None,
 ) -> dict:
+    require_gate_or_raise(db_path)
     with get_db(db_path) as conn:
         row = conn.execute("SELECT id FROM trial_sites WHERE id=?", (site_id,)).fetchone()
         if not row:

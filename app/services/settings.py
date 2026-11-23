@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from app.db import get_db
 from app.services import audit as audit_svc
+from app.services.audit_arch import require_gate_or_raise
 from app.services.errors import ServiceError
 
 
@@ -33,6 +34,7 @@ def update_setting(key: str, value: str, db_path: str | None = None) -> dict:
     value = "" if value is None else str(value).strip()
     if len(value) > 200:
         raise ServiceError("设置值过长")
+    require_gate_or_raise(db_path)
     with get_db(db_path) as conn:
         row = conn.execute(
             "SELECT key, value, label FROM app_settings WHERE key=?", (key,)
