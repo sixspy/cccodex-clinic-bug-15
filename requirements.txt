@@ -1,0 +1,4 @@
+cherrypy>=18.9,<19
+itsdangerous>=2.2,<3
+pytest>=8.0,<9
+httpx>=0.27,<1

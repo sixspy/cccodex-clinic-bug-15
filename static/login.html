@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>临床试验访视采集台 · 登录</title>
+  <link rel="stylesheet" href="/static/css/clinic.css" />
+</head>
+<body class="login-body">
+  <main class="login-card">
+    <h1>临床试验访视采集台</h1>
+    <p class="muted">数据工程 · 试验中心访视清单抓取与质控补采</p>
+    <label>用户名（登录）<input id="user" value="admin" autocomplete="username" /></label>
+    <label>密码<input id="pass" type="password" value="123456" autocomplete="current-password" /></label>
+    <button id="btn">登录</button>
+    <p id="err" class="err"></p>
+  </main>
+  <script>
+    document.getElementById('btn').onclick = async () => {
+      const r = await fetch('/api/login', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          username: document.getElementById('user').value,
+          password: document.getElementById('pass').value
+        })
+      });
+      const j = await r.json();
+      if (!r.ok) { document.getElementById('err').textContent = j.error || '登录失败'; return; }
+      location.href = '/app';
+    };
+  </script>
+</body>
+</html>
